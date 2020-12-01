@@ -10,14 +10,14 @@ from scipy.io.matlab import mio
 
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, list_ids, batch_size, dim, n_channels,
-                 shuffle, path_data, type_data):
+    def __init__(self, list_ids, path_data,  batch_size = 8, dim = (256, 256), n_channels = 1,
+                 shuffle = True,  type_data = 0):
         # Initializaion
         self.dim = dim
         self.batch_size = batch_size
         self.list_ids = list_ids
         self.n_channels = n_channels
-        self.pathdata = path_data
+        self.path_data = path_data
         self.type_data = type_data
         self.shuffle = shuffle
         self.on_epoch_end()
@@ -55,9 +55,9 @@ class DataGenerator(keras.utils.Sequence):
         # Generate data
         for i, ID in enumerate(list_ids_temp):
 
-            data = mio.loadmat(self.pathdata + ID)
+            data = mio.loadmat(self.path_data + ID)
             x_temp = data["X"]
-            y_temp = data["Y"]
+            y_temp = data["Yf"]
 
             if self.type_data == 0: # real, positif
                 x_temp = np.real(x_temp) - np.min(np.real(x_temp))
