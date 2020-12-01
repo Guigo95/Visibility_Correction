@@ -10,9 +10,8 @@ from scipy.io.matlab import mio
 
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, list_ids, path_data,  batch_size = 8, dim = (256, 256), n_channels = 1,
-                 shuffle = True,  type_data = 0):
-        # Initializaion
+    def __init__(self, list_ids, path_data,  batch_size=8, dim=(256, 256), n_channels=1,
+                 shuffle=True,  type_data=0):
         self.dim = dim
         self.batch_size = batch_size
         self.list_ids = list_ids
@@ -40,9 +39,9 @@ class DataGenerator(keras.utils.Sequence):
         return x, y
 
     def on_epoch_end(self):
-        'Updates indexes after each epoch'
+
         self.indexes = np.arange(len(self.list_ids))
-        if self.shuffle == True:
+        if self.shuffle:
             np.random.shuffle(self.indexes)
 
     def __data_generation(self, list_ids_temp):
@@ -50,23 +49,22 @@ class DataGenerator(keras.utils.Sequence):
         # Initialization
         x = np.empty((self.batch_size, *self.dim, self.n_channels))
         y = np.empty((self.batch_size, *self.dim, 1))
-        # y = np.empty((self.batch_size, *self.dim, 1))
 
         # Generate data
         for i, ID in enumerate(list_ids_temp):
 
             data = mio.loadmat(self.path_data + ID)
-            x_temp = data["X"]
-            y_temp = data["Yf"]
+            x_temp = data["X"]  # X is the name of the input in the matlab file
+            y_temp = data["Yf"] # Yf is the name of the ground truth in the matlab file
 
-            if self.type_data == 0: # real, positif
+            if self.type_data == 0:  # real, positif
                 x_temp = np.real(x_temp) - np.min(np.real(x_temp))
                 y_temp = np.real(y_temp) - np.min(np.real(y_temp))
-            elif self.type_data == 1: # module
+            elif self.type_data == 1:  # module
                 x_temp = np.abs(x_temp)
                 y_temp = np.abs(y_temp)
 
-            if self.type_data == 2: # real
+            if self.type_data == 2:  # real
                 x_temp = np.real(x_temp)
                 y_temp = np.real(y_temp)
 

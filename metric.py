@@ -7,15 +7,15 @@ Created on Fri Mar 20 09:05:25 2020
 import numpy as np
 from keras import backend as K
 
-def corr2(Img1,Img2):
-    m_Img1 =np.mean(Img1)
-    m_Img2 =np.mean(Img2)
-    t1=Img1-m_Img1
-    t2=Img2-m_Img2
+def corr2(Img1,Img2): # correlation between the two images, metrics
+    m_Img1 = np.mean(Img1)
+    m_Img2 = np.mean(Img2)
+    t1 = Img1-m_Img1
+    t2 = Img2-m_Img2
     
     num = np.sum(np.multiply(t1,t2))
     den = np.sqrt(np.sum(t1**2)*np.sum(t2**2))
-    r=num/den
+    r = num/den
     return r
 
 def met_corr(batch_size):
@@ -32,5 +32,4 @@ def met_corr(batch_size):
             r = r + num / den
         r /= batch_size
         return r
-
     return corr

@@ -8,15 +8,15 @@ from model import run_model
 import GPyOpt
 
 
-def run_bay_opti(bounds, max_iter, max_time, type_data, path_data_train, path_data_test, path_data_model, name_model,epochs = 100):
+def run_bay_opti(bounds, max_iter, max_time, type_data, path_data_train, path_data_test, path_data_model, name_model, epochs=100):
     def f(x):
         print(x)
         evaluation = run_model(
-            DO=float(x[:, 0]),
+            do=float(x[:, 0]),
             weights_decay=float(x[:, 1]),
             lr=float(x[:, 2]),
             momentum=float(x[:, 3]),
-            alpha_LR=float(x[:, 4]),
+            alpha_lr=float(x[:, 4]),
             batch_size=int(x[:, 5]),
             depth=int(x[:, 6]),
             nb_unit=int(x[:, 7]),
@@ -28,10 +28,10 @@ def run_bay_opti(bounds, max_iter, max_time, type_data, path_data_train, path_da
             path_data_train=path_data_train,
             path_data_test=path_data_test,
             path_data_model=path_data_model,
-            name_model = name_model,
-            bay_opti = 1,
-            unc = False,
-            epochs = epochs
+            name_model=name_model,
+            bay_opti=1,
+            unc=False,
+            epochs=epochs
             #   activation = int(x[:,10]),
         )
 
