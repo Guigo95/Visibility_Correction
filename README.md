@@ -1,6 +1,6 @@
 # Visibility_Correction
 
-UNET implementation, similar code than the one used for the paper: 'Compensating for visibility artefacts in photoacoustic imaging with a deep learning approach providing prediction uncertainties' 
+UNET implementation, similar than the one used for the paper: 'Compensating for visibility artefacts in photoacoustic imaging with a deep learning approach providing prediction uncertainties' 
 In this paper a model has been trained to remove artefacts on 2D photoacoustic images, and produce an uncertainty map of the prediction.
 
 A bayesian optimisation approach has been implemented in order to find the best parameters of the model.
