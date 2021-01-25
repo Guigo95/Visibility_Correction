@@ -11,7 +11,7 @@ from metric import corr2, met_corr
 import random as random
 import numpy as np
 from keras.models import Model, model_from_json
-from keras.layers import Input, MaxPooling2D, Conv2D, Dropout, UpSampling2D, concatenate, add, LeakyReLU
+from keras.layers import Input, MaxPooling2D, Conv2D, Dropout, UpSampling2D, concatenate, add, LeakyReLU, ReLU
 from keras.regularizers import l2
 from keras.layers.normalization import BatchNormalization
 from keras.optimizers import Adam
@@ -37,17 +37,14 @@ def reset_keras():
     K.set_session(tensorflow.Session(config=config))
 
 
-
-
-
 class Unet():
     def __init__(self,
                  name_model, path_data_train, path_data_test, path_data_model,
                  epochs=100, do=.5, weights_decay=.01, lr=1e-4,
                  momentum=.99, alpha_lr=.1, batch_size=8, depth=5,
                  nb_unit=64, skip=0, nb_drop=5, activation=1, unc=False, bay_opti=0,
-                 end_act_func=0, loss_func=0, type_data=0, pretrained_weights=None):
-        
+                 end_act_func=0, loss_func=0, type_data=0, type_model=0, pretrained_weights=None):
+
         self.name_model = name_model
         self.path_data_train = path_data_train
         self.path_data_test = path_data_test
@@ -66,6 +63,7 @@ class Unet():
         self.unc = unc
         self.alpha_lr = alpha_lr
         self.type_data = type_data
+        self.type_model = type_model
         self.pretrained_weights = pretrained_weights
         if end_act_func == 0:
             self.end_act_func = None
@@ -73,8 +71,8 @@ class Unet():
             self.end_act_func = 'relu'
         elif end_act_func == 2:
             self.end_act_func = 'sigmoid'
-            
-        if loss_func == 0 :
+
+        if loss_func == 0:
             self.loss_func = 'mse'
         else:
             self.loss_func = 'binary_crossentropy'
@@ -82,13 +80,12 @@ class Unet():
 
         self.test_generator = self.prepare_test_data()
         self.__model = self.create_model()
-        
 
     def prepare_training_data(self):
         params = {
-                  'path_data': self.path_data_train,
-                  'batch_size': self.batch_size,
-                  'type_data': self.type_data}
+            'path_data': self.path_data_train,
+            'batch_size': self.batch_size,
+            'type_data': self.type_data}
 
         name_file = os.listdir(self.path_data_train)
         random.seed(1)
@@ -96,52 +93,89 @@ class Unet():
         split_v = (np.round(0.8 * len(name_file))).astype('int')
         data = {"train": name_file[0:split_v], "validation": name_file[split_v + 1:len(name_file) - 1]}
         training_generator = DataGenerator(data['train'], **params)
-        validation_generator = DataGenerator(data['validation'], **params)           
+        validation_generator = DataGenerator(data['validation'], **params)
         return training_generator, validation_generator
 
     def prepare_test_data(self):
         params = {
-                  'shuffle': False,
-                  'path_data': self.path_data_test,
-                  'batch_size': 1,    
-                  'type_data': self.type_data}
-        
+            'shuffle': False,
+            'path_data': self.path_data_test,
+            'batch_size': 1,
+            'type_data': self.type_data}
+
         name_file = os.listdir(self.path_data_test)
         data = {"test": name_file}
         test_generator = DataGenerator(data['test'], **params)
         return test_generator
-        
+
+    def res_block(self, unit, first_block, prev_op):
+        x = Conv2D(unit, 1, padding='same', kernel_initializer='he_normal')(prev_op)
+        x = BatchNormalization(momentum=self.momentum, gamma_regularizer=l2(self.weights_decay),
+                               beta_regularizer=l2(self.weights_decay))(x)
+        if first_block == 1:
+            conva = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(prev_op)
+        else:
+            conva = BatchNormalization(momentum=self.momentum, gamma_regularizer=l2(self.weights_decay),
+                                       beta_regularizer=l2(self.weights_decay))(prev_op)
+
+            if self.activation == 0:
+                conva = ReLU()(conva)
+            else:
+                conva = LeakyReLU(alpha=self.alpha_lr)(conva)
+            conva = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(conva)
+
+        convb = BatchNormalization(momentum=self.momentum, gamma_regularizer=l2(self.weights_decay),
+                                   beta_regularizer=l2(self.weights_decay))(conva)
+
+        if self.activation == 0:
+            convb = ReLU()(convb)
+        else:
+            convb = LeakyReLU(alpha=self.alpha_lr)(convb)
+        convb = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(convb)
+        identity = add([x, convb])
+        return conva, convb, identity
+
+    def FD_block(self, i_block, prev_op):
+        return None
+
+    def unet_block(self, unit, prev_op):
+        conva = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(prev_op)
+        if self.activation == 0:
+            conva = ReLU()(conva)
+        else:
+            conva = LeakyReLU(alpha=self.alpha_lr)(conva)
+
+        conva = BatchNormalization(momentum=self.momentum, gamma_regularizer=l2(self.weights_decay),
+                                   beta_regularizer=l2(self.weights_decay))(conva)
+
+        convb = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(conva)
+        if self.activation == 0:
+            convb = ReLU()(convb)
+        else:
+            convb = LeakyReLU(alpha=self.alpha_lr)(convb)
+
+        convb = BatchNormalization(momentum=self.momentum, gamma_regularizer=l2(self.weights_decay),
+                                   beta_regularizer=l2(self.weights_decay))(convb)
+
+        return conva, convb
 
     def create_block_down(self, model_tot, drop_layer, i_block):
         block = []
         unit = self.nb_unit * (2 ** i_block)
-
-        if self.activation == 0:
-            met_acti = 'relu'
-            conva = Conv2D(unit, 3, activation=met_acti, padding='same', kernel_initializer='he_normal')(
-                model_tot[-1][-1])
-        else:
-            conva = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(model_tot[-1][-1])
-            conva = LeakyReLU(alpha=self.alpha_lr)(conva)
-
-        batchnorm = BatchNormalization(
-            momentum=self.momentum,
-            gamma_regularizer=l2(self.weights_decay),
-            beta_regularizer=l2(self.weights_decay))(conva)
-        if self.activation == 0:
-            convb = Conv2D(unit, 3, activation=met_acti, padding='same', kernel_initializer='he_normal')(batchnorm)
-        else:
-            convb = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(batchnorm)
-            convb = LeakyReLU(alpha=self.alpha_lr)(convb)
+        if self.type_model == 0:
+            block.extend(self.unet_block(unit, model_tot[-1][-1]))
+        elif self.type_model == 1:
+            if i_block == 0:
+                first_block = 1
+            else:
+                first_block = 0
+            block.extend(self.res_block(unit, first_block, model_tot[-1][-1]))
         if drop_layer == 1:
-            drop = Dropout(self.do)(convb, training=self.unc)
+            drop = Dropout(self.do)(block[-1], training=self.unc)
             pool = MaxPooling2D(pool_size=(2, 2))(drop)
         else:
-            pool = MaxPooling2D(pool_size=(2, 2))(convb)
+            pool = MaxPooling2D(pool_size=(2, 2))(block[-1])
 
-        block.append(conva)
-        block.append(batchnorm)
-        block.append(convb)
         if drop_layer == 1:
             block.append(drop)
         block.append(pool)
@@ -162,31 +196,15 @@ class Unet():
 
         merge = concatenate([model_tot[i_block][-2], up], axis=3)
 
-        if self.activation == 0:
-            conva = Conv2D(unit, 3, activation=met_acti, padding='same', kernel_initializer='he_normal')(merge)
-        else:
-            conva = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(merge)
-            conva = LeakyReLU(alpha=self.alpha_lr)(conva)
-
-        batchnorm = BatchNormalization(
-            momentum=self.momentum,
-            gamma_regularizer=l2(self.weights_decay),
-            beta_regularizer=l2(self.weights_decay))(conva)
-
-        if self.activation == 0:
-            convb = Conv2D(unit, 3, activation=met_acti, padding='same', kernel_initializer='he_normal')(batchnorm)
-        else:
-            convb = Conv2D(unit, 3, padding='same', kernel_initializer='he_normal')(batchnorm)
-            convb = LeakyReLU(alpha=self.alpha_lr)(convb)
-
         block.append(up)
         block.append(merge)
-        block.append(conva)
-        block.append(batchnorm)
-        block.append(convb)
+        if self.type_model == 0:
+            block.extend(self.unet_block(unit, merge))
+        elif self.type_model == 1:
+            block.extend(self.res_block(unit, 0, merge))
 
         if drop_layer == 1:
-            drop = Dropout(self.do)(convb, training=self.unc)
+            drop = Dropout(self.do)(block[-1], training=self.unc)
             block.append(drop)
         return block
 
@@ -196,7 +214,7 @@ class Unet():
         model_tot.append([inputs])
         # encoder
         for i in range(self.depth):
-            if i > self.depth -(self.nb_drop-1)/2 -2:
+            if i > self.depth - (self.nb_drop - 1) / 2 - 2:
                 drop_layer = 1
             else:
                 drop_layer = 0
@@ -205,7 +223,7 @@ class Unet():
 
         del model_tot[-1][-1]  # supress the last downsampling layer
         for i in range(self.depth - 1):
-            if i < (self.nb_drop-1)/2 :
+            if i < (self.nb_drop - 1) / 2:
                 drop_layer = 1
             else:
                 drop_layer = 0
@@ -220,7 +238,7 @@ class Unet():
         else:
             outputs = model_tot[-1][-1]
         model = Model(input=inputs, output=outputs)
-     
+
         model_json = model.to_json()
         with open(self.path_data_model + self.name_model + '.json', 'w') as json_file:
             json_file.write(model_json)
@@ -229,8 +247,9 @@ class Unet():
 
     def model_fit(self):
         self.training_generator, self.validation_generator = self.prepare_training_data()
-        
-        check = ModelCheckpoint(self.path_data_model + self.name_model + '_corr' + '.h5', monitor='val_corr', save_best_only=True,
+
+        check = ModelCheckpoint(self.path_data_model + self.name_model + '_corr' + '.h5', monitor='val_corr',
+                                save_best_only=True,
                                 save_weights_only=True, mode='max')
         es = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=20, verbose=0, mode='auto', baseline=None,
                            restore_best_weights=True)
@@ -241,7 +260,7 @@ class Unet():
         self.__model.compile(optimizer=Adam(lr=self.lr), loss=self.loss_func, metrics=[met_corr(self.batch_size)])
         self.__model.fit_generator(generator=self.training_generator,
                                    validation_data=self.validation_generator,
-                                   epochs=self.epochs, verbose=1, callbacks=[es, check])        
+                                   epochs=self.epochs, verbose=1, callbacks=[es, check])
         self.__model = None
 
     def model_evaluate(self):
@@ -249,35 +268,34 @@ class Unet():
         self.__model = model_from_json(open(self.path_data_model + self.name_model + '.json').read())
         self.__model.load_weights(self.path_data_model + self.name_model + '_corr' + '.h5')
         result_corr = []
-       
+
         if self.bay_opti:
             self.test_generator = self.validation_generator  # test the model on the validation set during the bayesiant process, and not on the test set
 
-        for x , y in self.test_generator:            
+        for x, y in self.test_generator:
             pred = self.__model.predict(x, verbose=1, steps=None, callbacks=None)
-            result_corr.append (corr2(y, pred))
+            result_corr.append(corr2(y, pred))
 
         evaluation = np.mean(np.array(result_corr))
         return 1 - evaluation
 
     def model_predict_from_testset(self, instance=0, load=1):
         if load == 1:
-            self.__model = model_from_json(open(self.path_data_model + self.name_model +'.json').read())
-        
+            self.__model = model_from_json(open(self.path_data_model + self.name_model + '.json').read())
+
         self.__model.load_weights(self.path_data_model + self.name_model + '_corr' + '.h5')
-        
+
         x, y = self.test_generator.__getitem__(instance)
         pred = self.__model.predict(x, verbose=1, steps=None, callbacks=None)
         return x, y, pred
 
     def model_predict(self, path_data, instance, load=1):
         self.path_data_test = path_data
-        self.test_generator = self.prepare_test_data()        
+        self.test_generator = self.prepare_test_data()
         return self.model_predict_from_testset(instance, load)
 
 
 def run_model(*args, **kwargs):
-    
     _model = Unet(*args, **kwargs)
     model_eval = _model.model_evaluate()
     del _model
@@ -286,6 +304,7 @@ def run_model(*args, **kwargs):
         gc.collect()
     K.clear_session()
     reset_keras()
-    
+
     return model_eval
+
 

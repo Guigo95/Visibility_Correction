@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Thu Apr 30 10:48:45 2020
 
@@ -11,10 +10,12 @@ os.chdir('C:/Users/Guillaume/DL/project/Visibility_Correction')
 from model import Unet, run_model
 from bayesian_optimisation import run_bay_opti
 
-path_data_train = '~/Tr/'
-path_data_test = '~/Ts/'
+path_data_train = 'C:/Users/Guillaume/DL/Data/training_feuille_exp_4/Tr4/'
+path_data_test = 'C:/Users/Guillaume/DL/Data/training_feuille_exp_4/Ts/'
+#path_data_train = '~/Tr/'
+#path_data_test = '~/Ts/'
 name_model = 'test'
-path_data_model = '~/'
+path_data_model = 'C:/'
 path_data_model = path_data_model + name_model +'/'
 if not os.path.exists(path_data_model):
     os.mkdir(path_data_model)
@@ -29,17 +30,19 @@ kwargs = {'epochs'             : 2,
           'momentum'           : 0.99, # for batch normalization layer
           'alpha_lr'           : 3e-02, # slope if leakyRelu
           'batch_size'         : 8,
-          'depth'              : 5, 
-          'nb_unit'            : 64, 
+          'depth'              : 5,
+          'nb_unit'            : 64,
           'skip'               : 0,  #skip connection between input and output
           'nb_drop'            : 5,  # nb layer with dropout, must be odd and placed around the bottleneck
           'activation'         : 0,  #0 full relu 1 leakyrelu
           'unc'                : False,  # activate if prediction with uncertainty
           'end_act_func'       : 0,  # activation function of the last layer
-          'loss_func'          : 0, 
+          'loss_func'          : 0,
           'bay_opti'           : 0,  # if bayesian optimisation, the test set become the validation set
-          'type_data'          : 0}  # 0 real 1 abs 2 real no rehauss
+          'type_data'          : 0,  # 0 real 1 abs 2 real no rehauss
+          'type_model'         : 1}  # 0 unet 1 resunet
 
+_model = Unet(*args, **kwargs)
 #%%
 # train model
 score = 1 - run_model(*args, **kwargs)
@@ -65,7 +68,7 @@ patch_dim = 256
 
 prediction_ensembles = np.ndarray((num_examples, patch_dim, patch_dim, 1, num_deep_ensembles))
 for dropout_idx in range(num_deep_ensembles):
-    for i in range(num_examples): 
+    for i in range(num_examples):
         result[i, :, :, :] = _model.model_predict(path_data_test, i, 0)[2]
     prediction_ensembles[:, :, :, :, dropout_idx] = result
     print('dropout ensembles: ' + str(dropout_idx + 1) + '/' + str(num_deep_ensembles))
@@ -110,7 +113,8 @@ bounds = [
           {'name': 'nb_drop',       'type': 'discrete',    'domain': (0, 1, 2, 3, 4, 5)},
           {'name': 'end_act_func',       'type': 'discrete',    'domain': (0, 1, 2)},
           {'name': 'loss_func',       'type': 'discrete',    'domain': (0, 1)}
-          ] 
+          ]
 res = run_bay_opti(bounds, 40, 100,
-               1, 
+               1,
                path_data_train, path_data_test, path_data_model, name_model, epochs = 2)
+
