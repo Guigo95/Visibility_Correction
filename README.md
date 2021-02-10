@@ -11,3 +11,9 @@ A bayesian optimisation approach has been implemented in order to find the best 
 To implement the method, it is required to set the following parameters in the main file: path_data_train (location of the training set), path_data_test (location of the test set) and path_data_model  (the location where the model will be saved).
 
 Note: input data must be in mat format.
+
+# Dependencies
+
+* Tensorflow 1.14.0
+* Keras  2.3.1
+* Python 3.7
